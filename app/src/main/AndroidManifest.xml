@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <application android:name=".TravelApplication" android:allowBackup="false" android:label="Control de viaje" android:supportsRtl="true" android:theme="@style/Theme.Control">
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity>
+        <service android:name=".feature.ai.data.TravelAppFunctionService" android:permission="android.permission.BIND_APP_FUNCTION_SERVICE" android:exported="true" android:enabled="@bool/app_functions_enabled" tools:targetApi="36">
+            <property android:name="android.app.appfunctions.schema" android:value="app_functions_schema.xsd" />
+            <property android:name="android.app.appfunctions.v2" android:value="travel_app_functions.xml" />
+            <intent-filter><action android:name="android.app.appfunctions.AppFunctionService" /></intent-filter>
+        </service>
+    </application>
+</manifest>
