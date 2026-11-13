@@ -9,7 +9,7 @@ import com.google.mlkit.genai.common.GenAiException
 import com.sdkecuador.control.feature.ai.data.NanoRepository
 import com.sdkecuador.control.feature.ai.data.AgentRepository
 import com.sdkecuador.control.feature.ai.data.AgentVisual
-import com.sdkecuador.control.feature.ai.data.isBalanceQuestion
+import com.sdkecuador.control.feature.ai.data.visualKind
 import com.sdkecuador.control.feature.expenses.data.ExpenseRules
 import com.sdkecuador.control.feature.voice.data.VoiceBudgetRules
 import com.sdkecuador.control.feature.trips.data.TravelRepository
@@ -106,6 +106,12 @@ class TripVoiceChatViewModel @Inject constructor(
     }
 
     fun stopListening() { listenJob?.cancel() }
+    fun sendText(message: String) {
+        val text = message.trim()
+        if (text.isNotEmpty() && !state.value.replying) {
+            viewModelScope.launch { replyTo(text) }
+        }
+    }
     fun showError(message: String) { _state.update { it.copy(error = message) } }
     fun markSpoken(id: Long) { _state.update { if (it.pendingSpeechId == id) it.copy(pendingSpeechId = null) else it } }
     fun consumeExpenseCommand() { _state.update { it.copy(pendingExpenseCommand = null) } }
@@ -115,12 +121,6 @@ class TripVoiceChatViewModel @Inject constructor(
         val history = state.value.messages.takeLast(8) + userMessage
         _state.update { it.copy(messages = it.messages + userMessage, listening = false, replying = true) }
         try {
-            if (isBalanceQuestion(message)) {
-                val answer = agent.replyForUi(message)
-                val assistantMessage = TripVoiceMessage(++nextMessageId, answer.text, false, answer.visual)
-                _state.update { it.copy(messages = it.messages + assistantMessage, pendingSpeechId = assistantMessage.id, error = null) }
-                return
-            }
             val conversation = history.joinToString("\n") {
                 "${if (it.fromUser) "Usuario" else "Asistente"}: ${it.text.take(500)}"
             }
@@ -130,7 +130,8 @@ class TripVoiceChatViewModel @Inject constructor(
                     "name, currency, budget, startDate, endDate y reply. " +
                     "Usa create_trip únicamente si el ÚLTIMO mensaje del usuario ordena crear o registrar un viaje. " +
                     "Usa add_expense únicamente si el ÚLTIMO mensaje del usuario ordena registrar un gasto. " +
-                    "Usa budget_query si el ÚLTIMO mensaje pregunta por presupuesto, saldo restante o gastos registrados de un viaje. " +
+                    "Usa budget_query si el ÚLTIMO mensaje pregunta o pide mostrar el saldo, presupuesto general, presupuestos por categoría o gastos registrados de un viaje. " +
+                    "Por ejemplo, 'Muéstrame los gastos de Lima' y '¿Cuáles son los límites por categoría de Lima?' usan budget_query. " +
                     "Para create_trip, extrae el nombre del viaje; currency debe ser USD, EUR, PEN o COP; " +
                     "budget es decimal positivo sin símbolo o cadena vacía; fechas en AAAA-MM-DD o cadena vacía. " +
                     "No inventes nombre, presupuesto, moneda ni fechas. Si no hay moneda explícita usa USD. " +
@@ -146,7 +147,8 @@ class TripVoiceChatViewModel @Inject constructor(
                     _state.update { it.copy(pendingExpenseCommand = message) }
                     "Preparé el gasto para el viaje seleccionado. Revisa los datos y confírmalo antes de guardarlo."
                 }
-            } else if (command?.optString("action") == "budget_query") {
+            } else if (command?.optString("action") == "budget_query" ||
+                (command?.optString("action") == "reply" && visualKind(message) != null)) {
                 agent.replyForUi(message).also { visual = it.visual }.text.ifBlank { "No pude consultar el presupuesto. Inténtalo de nuevo." }
             } else if (command?.optString("action") == "create_trip") {
                 val name = command.optString("name").trim()
